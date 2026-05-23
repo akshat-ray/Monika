@@ -124,7 +124,7 @@ client.once('clientReady', async () => {
 
         await channel.send(randomMsg);
 
-      }, 3600000);
+      }, 6400000);
     }
   }
 });
@@ -174,8 +174,8 @@ client.on('interactionCreate', async (interaction) => {
 
         messages: apiMessages,
 
-        max_tokens: 150,
-        temperature: 0.9,
+        max_tokens: 100,
+        temperature: 0.8,
       });
 
       const replyText =
@@ -221,8 +221,8 @@ client.on('interactionCreate', async (interaction) => {
           },
         ],
 
-        max_tokens: 100,
-        temperature: 0.95,
+        max_tokens: 80,
+        temperature: 0.9,
       });
 
       const replyText =
@@ -258,13 +258,15 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
+  if (message.author.id === client.user.id) return;
+
   if (message.mentions.has(client.user)) {
     try {
       await message.channel.sendTyping();
 
       const rawHistory =
         await message.channel.messages.fetch({
-          limit: 3,
+          limit: 2,
         });
 
       const formattedHistory = Array.from(rawHistory.values())
@@ -294,8 +296,8 @@ client.on('messageCreate', async (message) => {
 
         messages: apiMessages,
 
-        max_tokens: 150,
-        temperature: 0.9,
+        max_tokens: 100,
+        temperature: 0.8,
       });
 
       const replyText =
