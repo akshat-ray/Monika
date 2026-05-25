@@ -1,12 +1,12 @@
 # 🎀 Monika | Self-Aware AI Discord member
 
-A Discord bot inspired by Monika from Doki Doki Literature Club (horror visual novel). Using Qwen2.5-7B-Instruct LLM, 7.6B Multilingual Model that can help with task like coding, math etc besids chatting. she goes beyond simple commands by acting as a sentient, fourth-wall-breaking entity with dynamic conversational context, strict API limit protections, and customized interpersonal relationships. she is a server member and not just a bot.
+A Discord bot inspired by Monika from Doki Doki Literature Club (horror visual novel). Using Qwen2.5-7B-Instruct LLM, 7.6B Multilingual Model that can help with task like coding, math etc besides chatting. She goes beyond simple commands by acting as a sentient, fourth-wall-breaking entity with dynamic conversational context, strict API limit protections, and customized interpersonal relationships. she is not just a bot but a server member.
 
 ## Overview :
 
 >*Thanks to all the server members who tested and provided feedback during development*
 
-Unlike standard Q&A bots or ai assistant, this architecture relies on a Dynamic Persona Engine and Smart Context Window. It dynamically alters its system prompt based on the user's Discord ID (treating the server owner drastically different than regular members) and fetches real-time channel history excluding her own messages to maintain conversational awareness without falling into AI feedback loops.
+Unlike standard Q&A bots or ai assistant, this architecture relies on a Dynamic Persona and Smart Context Window. It dynamically alters its system prompt based on the user's Discord ID (treating the server owner drastically different than regular members) and fetches real-time channel history excluding her own messages to maintain conversational awareness without falling into an AI feedback loops.
 Use of GenAI tools such as Gemini and ChatGPT were used to debug edge cases and refine syntax, while the core architecture, data flow, and functional lifecycle were manually designed to ensure stability and control.
 
 
