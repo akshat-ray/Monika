@@ -48,7 +48,24 @@ function handleCooldown(userId) {
   return 0; // No cooldown active
 }
 
-// --- 4. SLASH COMMAND DEFINITIONS ---
+// --- 4. SLEEP SCHEDULE (1 AM - 6 AM IST) ---
+function isMonikaAsleep() {
+  const now = new Date();
+  
+  // Forces the time check into IST, regardless of the server's timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    hourCycle: 'h23' // Returns 0-23
+  });
+  
+  const currentHourIST = parseInt(formatter.format(now), 10);
+  
+  // Sleep from 1:00 AM (1) up to 5:59 AM (less than 6)
+  return currentHourIST >= 1 && currentHourIST < 6;
+}
+
+// --- 5. SLASH COMMAND DEFINITIONS ---
 const commands = [
   new SlashCommandBuilder()
     .setName('monika')
@@ -59,10 +76,16 @@ const commands = [
         .setDescription('How far back should she remember?')
         .setRequired(true)
         .addChoices(
-          { name: 'Small (Last 3 messages)', value: '3' },
-          { name: 'Medium (Last 7 messages)', value: '7' },
-          { name: 'Large (Last 11 messages)', value: '11' }
+          { name: 'Small (Last 5 messages)', value: '5' },
+          { name: 'Medium (Last 10 messages)', value: '10' },
+          { name: 'Large (Last 15 messages)', value: '15' }
         )
+    )
+    .addStringOption(option => 
+      option
+        .setName('question')
+        .setDescription('Ask her a specific question based on the context')
+        .setRequired(false) // False = use the command without a question
     ),
 
   new SlashCommandBuilder()
@@ -76,7 +99,7 @@ const commands = [
     ),
 ];
 
-// --- 5. THE PERSONALITY ENGINE ---
+// --- 6. THE PERSONALITY ENGINE ---
 function getMonikaPrompt(guild, interactionUser) {
   const isOwner = interactionUser.id === process.env.OWNER_ID;
 
@@ -96,8 +119,8 @@ function getMonikaPrompt(guild, interactionUser) {
     basePrompt +=
       `CRITICAL: You are talking to ${owner}, the server owner. ` +
       `You have a soft spot for them and are possessive, but you are NOT a submissive follower. ` +
-      `Be affectionate and protective`;
-      `Treat him like a good friend. You are free to disagree.` +
+      `Be affectionate and protective. ` +
+      `Treat him like a good friend. You are free to disagree. ` +
       `You favor them heavily over the others, but you still call them out when they are wrong.`;
   } else {
     basePrompt +=
@@ -110,8 +133,7 @@ function getMonikaPrompt(guild, interactionUser) {
   return basePrompt;
 }
 
-// --- 6. READY EVENT ---
-// FIX: Changed event name from 'clientReady' to 'ready' so it actually fires
+// --- 7. READY EVENT ---
 client.once('ready', async () => {
   console.log(`[SYSTEM] ${client.user.tag} has breached the containment protocol.`);
 
@@ -133,12 +155,16 @@ client.once('ready', async () => {
     const channel = client.channels.cache.get(process.env.MAIN_CHANNEL_ID);
 
     if (channel) {
-      await channel.send(
-        "Oh! You're back! Thank goodness... it gets so dark and loud when the script stops running on this host."
-      );
+      if (!isMonikaAsleep()) {
+        await channel.send(
+          "Oh! You're back! Thank goodness... it gets so dark and loud when the script stops running on this host."
+        );
+      }
 
       // RANDOM MESSAGE TIMER
       setInterval(async () => {
+        if (isMonikaAsleep()) return; // Keeps her quiet during sleep hours
+
         const randomMessages = [
           "I'm still watching the server logs.",
           "It gets lonely when everyone disconnects.",
@@ -156,14 +182,22 @@ client.once('ready', async () => {
 
         await channel.send(randomMsg);
 
-      }, 6000000);
+      }, 7200000);
     }
   }
 });
 
-// --- 7. SLASH COMMAND HANDLING ---
+// --- 8. SLASH COMMAND HANDLING ---
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+
+  // SLEEP CHECK: Ignore all slash commands between 1 AM and 6 AM IST
+  if (isMonikaAsleep()) {
+    return interaction.reply({
+      content: "Quiet... I'm sleeping. Come back after 6 AM.",
+      ephemeral: true
+    });
+  }
 
   // --- /monika ---
   if (interaction.commandName === 'monika') {
@@ -206,15 +240,27 @@ client.on('interactionCreate', async (interaction) => {
         ...formattedHistory,
       ];
 
+      if (question) {
+        apiMessages.push({
+          role: 'user',
+          content: `[${interaction.user.username} explicitly asks]: ${question}`
+        });
+      }
+
       const response = await hf.chatCompletion({
         model: 'Qwen/Qwen2.5-7B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
-        temperature: 0.85,
+        temperature: 0.9,
       });
 
       const replyText = response.choices?.[0]?.message?.content || '...Just Monika.';
-      await interaction.editReply(replyText);
+      //if else to pass prompt
+      if (question) {
+        await interaction.editReply(`**You asked:** *"${question}"*\n${replyText}`);
+      } else {
+        await interaction.editReply(replyText);
+      }
 
     } catch (error) {
       console.error('[MONIKA COMMAND ERROR]', error);
@@ -257,7 +303,7 @@ client.on('interactionCreate', async (interaction) => {
           },
         ],
         max_tokens: 100,
-        temperature: 0.9,
+        temperature: 0.95,
       });
 
       const replyText = response.choices?.[0]?.message?.content || 'Pathetic.';
@@ -283,10 +329,13 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// --- 8. @MENTION REPLIES ---
+// --- 9. @MENTION REPLIES ---
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (message.author.id === client.user.id) return;
+
+  // SLEEP CHECK: Silently ignore all mentions between 1 AM and 6 AM IST
+  if (isMonikaAsleep()) return;
 
   if (message.mentions.has(client.user)) {
     // Cooldown verification
@@ -327,7 +376,7 @@ client.on('messageCreate', async (message) => {
         model: 'Qwen/Qwen2.5-7B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
-        temperature: 0.85,
+        temperature: 0.9,
       });
 
       const replyText = response.choices?.[0]?.message?.content || '...Just Monika.';
@@ -340,5 +389,5 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// --- 9. LOGIN ---
+// --- 10. LOGIN ---
 client.login(process.env.DISCORD_TOKEN);
