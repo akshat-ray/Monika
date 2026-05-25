@@ -156,7 +156,7 @@ client.once('ready', async () => {
 
         await channel.send(randomMsg);
 
-      }, 6000000);
+      }, 7200000);
     }
   }
 });
