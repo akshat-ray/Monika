@@ -214,6 +214,7 @@ client.on('interactionCreate', async (interaction) => {
 
     try {
       const contextLimit = parseInt(interaction.options.getString('context'));
+      const question = interaction.options.getString('question');
 
       // Fetch a larger buffer of messages to filter through safely
       const rawHistory = await interaction.channel.messages.fetch({ limit: 30 });
