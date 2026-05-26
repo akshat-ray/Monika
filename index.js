@@ -182,7 +182,7 @@ client.once('ready', async () => {
 
         await channel.send(randomMsg);
 
-      }, 7200000);
+      }, 10800000);
     }
   }
 });
@@ -252,7 +252,7 @@ client.on('interactionCreate', async (interaction) => {
         model: 'Qwen/Qwen2.5-7B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
-        temperature: 0.9,
+        temperature: 0.8,
       });
 
       const replyText = response.choices?.[0]?.message?.content || '...Just Monika.';
@@ -304,7 +304,7 @@ client.on('interactionCreate', async (interaction) => {
           },
         ],
         max_tokens: 100,
-        temperature: 0.95,
+        temperature: 0.9,
       });
 
       const replyText = response.choices?.[0]?.message?.content || 'Pathetic.';
@@ -377,7 +377,7 @@ client.on('messageCreate', async (message) => {
         model: 'Qwen/Qwen2.5-7B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
-        temperature: 0.9,
+        temperature: 0.8,
       });
 
       const replyText = response.choices?.[0]?.message?.content || '...Just Monika.';
