@@ -43,4 +43,5 @@ The system infrastructure is built completely online so the laptop is not runnin
 
 * **External Permanent Memory:** Integration with a PostgreSQL database (Supabase) to store permanent relationship weights and facts about specific users.
 * **Gradual Priority Memory:** A fading memory architecture where older context degrades over a 24-hour period rather than a hard reset.
-
+* **PEFT :** Fine-tuining Qwen2.5-7B-Instruct model on Ingame and official social media interactions of Monika.
+* **Improving Human Like Conversation :** Currently it Hallucinates alot, and the context is lost and more improtance is given to Base system prompt.
