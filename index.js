@@ -84,9 +84,15 @@ async function buildUserContext(member, userId) {
     // 2. Extrapolate live identity from server role bindings instead of using a static table column
     if (member) {
       const roles = member.roles.cache.map(r => r.name.toLowerCase());
-      if (roles.some(r => r.includes('he/him'))) userContext.gender = 'Male (He/Him)';
-      else if (roles.some(r => r.includes('she/her'))) userContext.gender = 'Female (She/Her)';
-      else if (roles.some(r => r.includes('they/them'))) userContext.gender = 'Non-binary (They/Them)';
+      
+      // Now it checks if both words exist in the string, completely ignoring the middle symbols!
+      if (roles.some(r => r.includes('he') && r.includes('him'))) {
+        userContext.gender = 'Male (He/Him)';
+      } else if (roles.some(r => r.includes('she') && r.includes('her'))) {
+        userContext.gender = 'Female (She/Her)';
+      } else if (roles.some(r => r.includes('they') && r.includes('them'))) {
+        userContext.gender = 'Non-binary (They/Them)';
+      }
     }
 
     // 3. Fetch game titles categorized by usage volume frequency
