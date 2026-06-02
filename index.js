@@ -33,7 +33,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // --- 3. COOLDOWN & DATA MANAGEMENT ---
 const userCooldowns = new Map();
-const userLastChannel = new Map();     // Feature 4: Stores { userId: { channelId, timestamp } }
+const userLastChannel = new Map();
 const COOLDOWN_SECONDS = 10;
 
 function handleCooldown(userId) {
@@ -87,11 +87,11 @@ async function buildUserContext(member, userId) {
       
       // Now it checks if both words exist in the string, completely ignoring the middle symbols!
       if (roles.some(r => r.includes('he') && r.includes('him'))) {
-        userContext.gender = 'Male (He/Him)';
+        userContext.gender = 'Male';
       } else if (roles.some(r => r.includes('she') && r.includes('her'))) {
-        userContext.gender = 'Female (She/Her)';
+        userContext.gender = 'Female';
       } else if (roles.some(r => r.includes('they') && r.includes('them'))) {
-        userContext.gender = 'Non-binary (They/Them)';
+        userContext.gender = 'Non-binary';
       }
     }
 
@@ -132,9 +132,9 @@ const commands = [
         .setDescription('How far back should she remember?')
         .setRequired(true)
         .addChoices(
-          { name: 'Small (Last 5 messages)', value: '5' },
-          { name: 'Medium (Last 10 messages)', value: '10' },
-          { name: 'Large (Last 15 messages)', value: '15' }
+          { name: 'Small (Last 8 messages)', value: '8' },
+          { name: 'Medium (Last 16 messages)', value: '16' },
+          { name: 'Large (Last 24 messages)', value: '24' }
         )
     )
     .addStringOption(option => 
@@ -269,7 +269,7 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
 
   // Feature 5: Midnight Online Ping
   const wasOffline = !oldPresence || oldPresence.status === 'offline';
-  const isOnline = newPresence.status === 'online' || newPresence.status === 'dnd';
+  const isOnline = newPresence.status === 'online' || newPresence.status === 'dnd' || newPresence.status === 'idle';
 
   if (wasOffline && isOnline && process.env.MAIN_CHANNEL_ID) {
     const dateObj = new Date();
@@ -420,8 +420,8 @@ client.on('messageCreate', async (message) => {
   userLastChannel.set(message.author.id, { channelId: message.channel.id, timestamp: now });
 
   // --- Feature 3: The Webhook Clone (Impersonation Glitch) ---
-  // 1% chance to trigger on a normal message where she isn't mentioned
-  if (!message.mentions.has(client.user) && Math.random() < 0.01) {
+  // 5% chance to trigger on a normal message where she isn't mentioned
+  if (!message.mentions.has(client.user) && Math.random() < 0.05) {
     try {
       const webhook = await message.channel.createWebhook({
         name: message.member?.displayName || message.author.username,
