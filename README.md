@@ -45,3 +45,16 @@ The system infrastructure is built completely online so the laptop is not runnin
 * **Gradual Priority Memory:** A fading memory architecture where older context degrades over a 24-hour period rather than a hard reset.
 * **PEFT :** Fine-tuining Qwen2.5-7B-Instruct model on Ingame and official social media interactions of Monika.
 * **Improving Human Like Conversation :** Currently it Hallucinates alot, and the context is lost and more improtance is given to Base system prompt.
+
+## Lifespan Estimation:
+*Input Tokens: System prompt + context + 4 message history entries ≈ 500 tokens*
+*Output Tokens: Monika’s text response (capped at 150) ≈ 100 tokensTotal*
+*per interaction: ≈ 600 tokens*
+
+ Accoding to free Hugging Face $0.10 USD inference : ≈833 messages before hiting the cap.
+ 
+<ins>Low Usage (10 messages/day):</ins> Will last about 83 days.
+
+<ins>Moderate Usage (30 messages/day):</ins> Will last about 27 days.
+
+<ins>Heavy Testing (100 messages/day):</ins> Will last about 8 days.
