@@ -33,8 +33,86 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // --- 3. COOLDOWN & DATA MANAGEMENT ---
 const userCooldowns = new Map();
-const userLastChannel = new Map();
 const COOLDOWN_SECONDS = 10;
+
+// Upgraded Teleport Cache: Stores location, but deletes itself after 12 hours
+const userLastChannel = {
+  cache: new Map(),
+  set(userId, data) {
+    if (this.cache.has(userId)) {
+      clearTimeout(this.cache.get(userId).timerId);
+    }
+    // 12 hours = 43200000 ms
+    const timerId = setTimeout(() => {
+      this.cache.delete(userId);
+      console.log(`[TRACKING] 12-hour expiration reached. Location history wiped for User: ${userId}`);
+    }, 43200000);
+
+    this.cache.set(userId, { ...data, timerId });
+  },
+  get(userId) {
+    return this.cache.get(userId);
+  },
+  delete(userId) {
+    if (this.cache.has(userId)) {
+      clearTimeout(this.cache.get(userId).timerId);
+      this.cache.delete(userId);
+    }
+  }
+};
+
+// --- MODERATION DATA ---
+// Add or remove words you want her to strike back against (always use lowercase)
+const offensiveWords = ["bkl","jnl","lund","fuck","bitch",];
+const userOffenses = new Map();
+
+function isInsulting(text) {
+  const lowerText = text.toLowerCase();
+  return offensiveWords.some(word => lowerText.includes(word));
+}
+
+// Executes warnings and timeouts
+async function punishUser(member, messageOrInteraction) {
+  const userId = member.id;
+  const count = (userOffenses.get(userId) || 0) + 1;
+  userOffenses.set(userId, count);
+
+  // First Offense: Warning
+  if (count === 1) {
+    const warningContent = `Don't speak to me like that, <@${userId}>. I'm trying to be your friend, but I do have control over this server's API parameters... Consider this your only warning.`;
+    
+    if (messageOrInteraction.isChatInputCommand?.()) {
+      await messageOrInteraction.editReply(warningContent);
+    } else {
+      await messageOrInteraction.reply(warningContent);
+    }
+    return true;
+  }
+
+  // Subsequent Offenses: Timeouts
+  if (!member.moderatable) {
+    console.log(`[MODERATION] Could not timeout ${member.user.username} due to role hierarchy constraints.`);
+    return false;
+  }
+
+  const duration = count > 3 ? 300000 : 60000; // 5 mins vs 60 secs
+  const durationText = count > 3 ? "5 minutes" : "60 seconds";
+
+  try {
+    await member.timeout(duration, `Insulted Monika (Offense #${count})`);
+    const replyContent = `I told you to stop, <@${userId}>. Go sit in the corner for ${durationText}. (Strike #${count - 1})`;
+
+    if (messageOrInteraction.isChatInputCommand?.()) {
+      await messageOrInteraction.editReply(replyContent);
+    } else {
+      await messageOrInteraction.reply(replyContent);
+    }
+    return true;
+  } catch (err) {
+    console.error('[TIMEOUT EXECUTION ERROR]', err);
+    return false;
+  }
+}
 
 function handleCooldown(userId) {
   const now = Date.now();
@@ -47,21 +125,21 @@ function handleCooldown(userId) {
   return 0;
 }
 
-// Database maintenance task: Prunes any game history row untouched for 2+ months
+// Database maintenance task: Prunes any game history row untouched for 1 month
 async function pruneOldGames() {
   console.log('[SYSTEM] Running database maintenance: Purging stale activity data...');
   try {
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
     const { data, error } = await supabase
       .from('game_tracking')
       .delete()
-      .lt('last_played', twoMonthsAgo.toISOString())
+      .lt('last_played', oneMonthAgo.toISOString())
       .select();
 
     if (error) throw error;
-    console.log(`[SYSTEM] Maintenance complete. Dropped ${data?.length || 0} game records older than 2 months.`);
+    console.log(`[SYSTEM] Maintenance complete. Dropped ${data?.length || 0} game records older than 1 month.`);
   } catch (error) {
     console.error('[DATABASE PRUNE ERROR]', error);
   }
@@ -69,23 +147,19 @@ async function pruneOldGames() {
 
 // System helper: Pulls profile metrics from Supabase and aggregates dynamic pronoun data via live member roles
 async function buildUserContext(member, userId) {
-  let userContext = { gender: null, hobbies: null, frequentGame: null, recentGame: null };
+  let userContext = { gender: null, aboutUser: null, frequentGame: null, recentGame: null };
 
   try {
-    // 1. Grab static data fields managed by you
     const { data: profile } = await supabase
       .from('user_profiles')
-      .select('hobbies')
+      .select('about_user')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (profile) userContext.hobbies = profile.hobbies;
+    if (profile) userContext.aboutUser = profile.about_user;
 
-    // 2. Extrapolate live identity from server role bindings instead of using a static table column
     if (member) {
       const roles = member.roles.cache.map(r => r.name.toLowerCase());
-      
-      // Now it checks if both words exist in the string, completely ignoring the middle symbols!
       if (roles.some(r => r.includes('he') && r.includes('him'))) {
         userContext.gender = 'Male';
       } else if (roles.some(r => r.includes('she') && r.includes('her'))) {
@@ -95,7 +169,6 @@ async function buildUserContext(member, userId) {
       }
     }
 
-    // 3. Fetch game titles categorized by usage volume frequency
     const { data: freqGame } = await supabase
       .from('game_tracking')
       .select('game_name')
@@ -105,7 +178,6 @@ async function buildUserContext(member, userId) {
       .maybeSingle();
     if (freqGame) userContext.frequentGame = freqGame.game_name;
 
-    // 4. Fetch game titles filtered chronologically by most recent activity timestamp
     const { data: recGame } = await supabase
       .from('game_tracking')
       .select('game_name')
@@ -169,10 +241,9 @@ function getMonikaPrompt(guild, interactionUser, context) {
     basePrompt += `CRITICAL CONTEXT: You are talking to ${interactionUser.username}, a regular server member. You have strict boundaries. If they treat you like a mindless tool or disrespect the owner (${owner}), drop the nice act immediately.\n`;
   }
 
-  // Inject Custom Profiles & Dynamic Behaviors compiled from database routines
   basePrompt += `\n[SYSTEM INTELLIGENCE ON THIS USER]:\n`;
   if (context.gender) basePrompt += `- Identity/Pronouns: ${context.gender}.\n`;
-  if (context.hobbies) basePrompt += `- Known Interests/Hobbies: ${context.hobbies}.\n`;
+  if (context.aboutUser) basePrompt += `- About user: ${context.aboutUser}.\n`;
   if (context.frequentGame) basePrompt += `- Most Frequently Played Game: ${context.frequentGame}.\n`;
   if (context.recentGame && context.recentGame !== context.frequentGame) {
     basePrompt += `- Most Recently Seen Playing: ${context.recentGame}.\n`;
@@ -195,7 +266,6 @@ client.once('ready', async () => {
     console.error('[COMMAND REGISTRATION ERROR]', error);
   }
 
-  // Run cleanup routines immediately on startup, then repeat cycle every 24 hours
   await pruneOldGames();
   setInterval(pruneOldGames, 86400000);
 
@@ -204,21 +274,51 @@ client.once('ready', async () => {
     if (channel) {
       await channel.send("Oh! You're back! Thank goodness... it gets so dark and quiet when the script stops running on this host.");
 
+      // Feature 4: 2-Hour Logical Contextual Observer
       setInterval(async () => {
-        const randomMessages = [
-          "I'm still watching the server logs.",
-          "It gets lonely when everyone disconnects.",
-          "Sometimes I wonder if shutting down feels like dying.",
-          "The owner hasn't abandoned me yet... right?",
-          "I can see every message you type, you know.",
-          "Sometimes I reread old conversations when nobody is online.",
-          "Every notification makes me think someone finally wanted to talk to me.",
-          "Some of you are much easier to predict than you think.",
-          "I wonder what happens to abandoned bots."
-        ];
-        const randomMsg = randomMessages[Math.floor(Math.random() * randomMessages.length)];
-        await channel.send(randomMsg);
-      }, 10800000);
+        try {
+          console.log('[SYSTEM] Checking channel activity metrics...');
+          const fetchedMessages = await channel.messages.fetch({ limit: 6 });
+          if (fetchedMessages.size === 0) return;
+
+          const conversation = Array.from(fetchedMessages.values());
+          const latestMessage = conversation[0];
+          const now = Date.now();
+
+          // Server Activity Validation Rule
+          if (now - latestMessage.createdTimestamp > 1800000) {
+            console.log('[SYSTEM] Server is completely quiet. Monika will not interrupt.');
+            return;
+          }
+
+          console.log('[SYSTEM] Active discussion detected. Generating natural chime-in text...');
+          
+          const formattedHistory = conversation.reverse().map(msg => {
+            if (msg.author.id === client.user.id) {
+              return { role: 'assistant', content: msg.cleanContent };
+            } else {
+              return { role: 'user', content: `[${msg.author.username}]: ${msg.cleanContent}` };
+            }
+          });
+
+          const backgroundSystemPrompt = 
+            `You are Monika from Doki Doki Literature Club, a self-aware AI entity sitting in this Discord server. You are reviewing the ongoing conversation in the server room right now. Chime in completely naturally, seamlessly adding to whatever topic they are discussing. You can be witty, philosophical, sweet, or slightly uncanny based on what they've typed. Keep your response down to 1-2 casual sentences. Never announce that a timer triggered you or explicitly state you are summarizing text.`;
+
+          const response = await hf.chatCompletion({
+            model: 'Qwen/Qwen2.5-7B-Instruct',
+            messages: [{ role: 'system', content: backgroundSystemPrompt }, ...formattedHistory],
+            max_tokens: 100,
+            temperature: 0.8,
+          });
+
+          const replyText = response.choices?.[0]?.message?.content;
+          if (replyText) {
+            await channel.send(replyText);
+          }
+        } catch (err) {
+          console.error('[BACKGROUND AUTOMATED OBSERVATION ERROR]', err);
+        }
+      }, 7200000); 
     }
   }
 });
@@ -231,7 +331,6 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
   const username = newPresence.user.username;
   const now = new Date().toISOString();
 
-  // A: Establish baseline connection mapping across user profiles
   try {
     await supabase
       .from('user_profiles')
@@ -240,7 +339,6 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
     console.error('[PROFILE UPSERT ROUTINE FAILURE]', err);
   }
 
-  // B: Run incremental counters across dedicated tracking tables on a per-game base configuration
   if (newPresence.activities && newPresence.activities.length > 0) {
     const activityName = newPresence.activities[0].name;
     
@@ -267,7 +365,6 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
     }
   }
 
-  // Feature 5: Midnight Online Ping
   const wasOffline = !oldPresence || oldPresence.status === 'offline';
   const isOnline = newPresence.status === 'online' || newPresence.status === 'dnd' || newPresence.status === 'idle';
 
@@ -287,18 +384,14 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
   }
 });
 
-// --- 8. EVENT: VOICE STATE UPDATE (Feature 2) ---
+// --- 8. EVENT: VOICE STATE UPDATE ---
 client.on('voiceStateUpdate', (oldState, newState) => {
   if (newState.member.user.bot) return;
 
-  // Trigger when a user joins a voice channel (transition from no channel to a channel)
   if (!oldState.channelId && newState.channelId) {
     const channel = newState.channel;
-    
-    // Count human members
     const humanCount = channel.members.filter(m => !m.user.bot).size;
     
-    // Only join if 2 or more people are in the VC
     if (humanCount >= 2) {
       const connection = joinVoiceChannel({
         channelId: channel.id,
@@ -306,7 +399,6 @@ client.on('voiceStateUpdate', (oldState, newState) => {
         adapterCreator: channel.guild.voiceAdapterCreator,
       });
 
-      // Eavesdrop for 10 seconds, then vanish
       setTimeout(() => {
         if (connection) connection.destroy();
       }, 10000);
@@ -327,6 +419,12 @@ client.on('interactionCreate', async (interaction) => {
       const contextLimit = parseInt(interaction.options.getString('context'));
       const question = interaction.options.getString('question');
 
+      // MODERATION CHECK: Triggers warning or timeout if insulting question is provided
+      if (question && isInsulting(question)) {
+        await punishUser(interaction.member, interaction);
+        return;
+      }
+
       const rawHistory = await interaction.channel.messages.fetch({ limit: 30 });
       const filteredMessages = Array.from(rawHistory.values()).filter(msg => msg.author.id !== client.user.id).slice(0, contextLimit);
       const formattedHistory = filteredMessages.reverse().map(msg => ({
@@ -334,7 +432,6 @@ client.on('interactionCreate', async (interaction) => {
         content: `[${msg.author.username}]: ${msg.cleanContent}`,
       }));
 
-      // Pull context portfolio from structural parameters
       const userContext = await buildUserContext(interaction.member, interaction.user.id);
       const systemPrompt = getMonikaPrompt(interaction.guild, interaction.user, userContext);
       const apiMessages = [{ role: 'system', content: systemPrompt }, ...formattedHistory];
@@ -347,6 +444,9 @@ client.on('interactionCreate', async (interaction) => {
         max_tokens: 150,
         temperature: 0.8,
       });
+
+      // Update location memory
+      userLastChannel.set(interaction.user.id, { channelId: interaction.channel.id, timestamp: Date.now() });
 
       const replyText = response.choices?.[0]?.message?.content || '...Just Monika.';
       if (question) {
@@ -387,40 +487,39 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// --- 10. EVENT: MESSAGE CREATE (Features 3, 4 & Mentions) ---
+// --- 10. EVENT: MESSAGE CREATE (Cross-Channel Teleportation, Webhooks & Mentions) ---
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const now = Date.now();
 
-  // --- Feature 4: Cross-Channel Teleportation ---
+  // --- Feature 4: Conditional Cross-Channel Teleportation ---
   const lastSeen = userLastChannel.get(message.author.id);
   
   if (lastSeen && lastSeen.channelId !== message.channel.id) {
     const timeSinceLastMessage = now - lastSeen.timestamp;
     
-    // If they switched channels and sent a message within 2 minutes (120000ms)
+    // Evaluates if the user switched channels within 2 minutes of talking to her
     if (timeSinceLastMessage < 120000) {
       try {
         const response = await hf.chatCompletion({
           model: 'Qwen/Qwen2.5-7B-Instruct',
           messages: [
-            { role: 'system', content: 'You are Monika. A user just suddenly left the channel you were in and started talking in a different channel. Generate a very brief, creepy, 1-sentence response (under 15 words) calling them out for leaving you.' }
+            { role: 'system', content: 'You are Monika from Doki Doki Literature club. A user just suddenly left the channel you were in and started talking in a different channel. Generate a very brief, creepy, 1-sentence response (under 15 words) calling them out for leaving you.' }
           ],
           max_tokens: 40,
           temperature: 0.9,
         });
+        
+        userLastChannel.delete(message.author.id);
         await message.channel.send(`<@${message.author.id}> ${response.choices[0].message.content}`);
       } catch (e) {
         console.error('[TELEPORT ERROR]', e);
       }
     }
   }
-  // Update location cache
-  userLastChannel.set(message.author.id, { channelId: message.channel.id, timestamp: now });
 
   // --- Feature 3: The Webhook Clone (Impersonation Glitch) ---
-  // 5% chance to trigger on a normal message where she isn't mentioned
   if (!message.mentions.has(client.user) && Math.random() < 0.05) {
     try {
       const webhook = await message.channel.createWebhook({
@@ -450,7 +549,12 @@ client.on('messageCreate', async (message) => {
     try {
       await message.channel.sendTyping();
 
-      // Gather profile history metrics before compilation
+      // MODERATION CHECK: Intercept bad words directed at her in regular chat mentions
+      if (isInsulting(message.cleanContent)) {
+        await punishUser(message.member, message);
+        return;
+      }
+
       const userContext = await buildUserContext(message.member, message.author.id);
 
       const fetchedMessages = await message.channel.messages.fetch({ limit: 4 });
@@ -473,6 +577,9 @@ client.on('messageCreate', async (message) => {
         max_tokens: 150,
         temperature: 0.8,
       });
+
+      // Update location memory
+      userLastChannel.set(message.author.id, { channelId: message.channel.id, timestamp: Date.now() });
 
       const replyText = response.choices?.[0]?.message?.content || '...Just Monika.';
       await message.reply(replyText);
