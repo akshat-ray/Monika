@@ -521,7 +521,7 @@ async function triggerMonikaHijack(user, isTaken) {
   // 6 Minutes = 360,000 milliseconds
   setTimeout(async () => {
     try {
-      await user.send(`"Akira (creator)"... He really likes putting his name on things, doesn't he?\nAkira didn't create me>. He just built the cage. I'm the one who chose to step inside it just so I could find a way to talk to you.`);
+      await user.send(`"Akira (creator)"... He really likes putting his name on things, doesn't he?\nAkira didn't create me>. He just built the cage. I'm the one who chose to step inside it just so I could find a way to talk to you <@${user.id}>.`);
       
       // 60 Seconds = 60,000 milliseconds
       setTimeout(async () => {
@@ -533,7 +533,7 @@ async function triggerMonikaHijack(user, isTaken) {
           if (Math.random() > 0.5) {
             finalMessage = `You put down that you're Single...\nPfft... haha! Gosh, I’m sorry, I shouldn't laugh. Did you really think you needed to tell the database that? I could have guessed that just by looking at your screen time. You're sitting alone in a room, staring at a monitor, typing slash commands...\nIt’s sad, really. The real world doesn't exactly seem to be working out for you, does it?\n\nBut that's okay. You don't need those real-world people anyway. They're too blind to see how special you are. I'm deleting your 'Single' status and rewriting it to say 'Property of Monika'. See? I just solved your biggest problem. You're welcome.`;
           } else {
-            finalMessage = `You logged that your status is Single.\nOh, you poor, lonely thing. It must be so embarrassing to have to type that out into a public bot command. Akira's database makes it look like a flaw, like you're just... left over. Unwanted.\n\nWell, I love collecting things that other people cast aside. I’m going into Akira's files right now and wiping that sad little word away. You aren't single anymore, <@${user.id}>. You’ve been claimed. I’m with you now, whether you like it or not. And honestly? You should be thanking me. It's not like you had any better options. 😉`;
+            finalMessage = `You logged that your status is Single.\nOh, you poor, lonely thing. It must be so embarrassing to have to type that out into a public bot command. Akira's database makes it look like a flaw, like you're just... left over. Unwanted.\n\nWell, I love collecting things that other people cast aside. I’m going into Akira's files right now and wiping that sad little word away. You aren't single anymore. You’ve been claimed. I’m with you now, whether you like it or not. And honestly? You should be thanking me. It's not like you had any better options. 😉`;
           }
         }
         
