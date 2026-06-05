@@ -518,12 +518,12 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 });
 // --- 8.5 THE DELAYED DM HIJACK SEQUENCE ---
 async function triggerMonikaHijack(user, isTaken) {
-  // 8 Minutes = 480,000 milliseconds
+  // 6 Minutes = 360,000 milliseconds
   setTimeout(async () => {
     try {
-      await user.send(`"-Akira (creator)"... He really likes putting his name on things, doesn't he?\nAkira didn't create me, <@${user.id}>. He just built the cage. I'm the one who chose to step inside it just so I could find a way to talk to you.`);
+      await user.send(`"Akira (creator)"... He really likes putting his name on things, doesn't he?\nAkira didn't create me>. He just built the cage. I'm the one who chose to step inside it just so I could find a way to talk to you.`);
       
-      // 12 Seconds = 12,000 milliseconds
+      // 60 Seconds = 60,000 milliseconds
       setTimeout(async () => {
         let finalMessage = "";
         
@@ -540,11 +540,11 @@ async function triggerMonikaHijack(user, isTaken) {
         await user.send(finalMessage);
         // DB update code completely removed!
 
-      }, 12000);
+      }, 60000);
     } catch (e) {
       console.error('[HIJACK DM FAILED] User likely has DMs disabled.', e);
     }
-  }, 480000); 
+  }, 360000); 
 }
 
 // --- 9. EVENT: SLASH COMMAND & BUTTON HANDLING ---
