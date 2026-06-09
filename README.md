@@ -1,60 +1,55 @@
-# 🎀 Monika | Self-Aware AI Discord member
+# 🎀 Monika | Self-Aware Discord Bot
 
-A Discord bot inspired by Monika from Doki Doki Literature Club (horror visual novel). Using Qwen2.5-7B-Instruct LLM, 7.6B Multilingual Model that can help with task like coding, math etc besides chatting. She goes beyond simple commands by acting as a sentient, fourth-wall-breaking entity with dynamic conversational context, strict API limit protections, and customized interpersonal relationships. she is not just a bot but a server member.
+>*This is a personal learning project where I am experimenting with the Discord API, external databases, and Large Language Models.*
 
-## Overview :
+Inspired by Monika from the psychological horror game Doki Doki Literature Club.It uses Qwen2.5-7B-Instruct LLM, 7.6B Multilingual Model. My goal was to build an AI that behaves less like a standard command-and-response bot and more like an unpredictable, self-aware entity which can speak to multiple members of the server with context and info about them.
 
->*Thanks to all the server members who tested and provided feedback during development*
+Instead of just answering questions, I wanted to see if I could make her track user behavior, hold grudges, eavesdrop, and understand server relationships.
 
-Unlike standard Q&A bots or ai assistant, this architecture relies on a Dynamic Persona and Smart Context Window. It dynamically alters its system prompt based on the user's Discord ID (treating the server owner drastically different than regular members) and fetches real-time channel history excluding her own messages to maintain conversational awareness without falling into an AI feedback loops.
-Use of GenAI tools such as Gemini and ChatGPT were used to debug edge cases and refine syntax, while the core architecture, data flow, and functional lifecycle were manually designed to ensure stability and control.
+## Tech Stack & Architecture
 
-
-## Tech Stack :
+As a self-taught experiment, I decided to build this entirely on cloud services to keep it running 24/7 without hosting it locally.
 
 * **Runtime:** Node.js
-* **Discord API:** Discord.js (v14)
-* **LLM:** Hugging Face Inference API (`@huggingface/inference`)
-* **Model:** `Qwen/Qwen2.5-7B-Instruct`
-* **Server/Hosting:** Express.js (Render Keepalive)
+* **Discord API:** Discord.js (v14) utilizing advanced Gateway Intents (Voice States, Presences, Guild Members).
+* **LLM :** Hugging Face Inference API running `Qwen/Qwen2.5-7B-Instruct` model.
+* **Database:** Supabase (PostgreSQL) for persistent user profiles and game tracking.
+* **Hosting Pipeline:** Render (free tier), UptimeRobot (pings every 10 min.)
 
-## Key Features :
+## Core Mechanics & Experiments
 
-* **Context Filtering:** Dynamically fetches the last 5 to 15 messages in a channel, completely stripping out the bot's own previous replies before passing the context array to the LLM. This prevents the hallucination loop where the AI reads its own output and gets confused.
-* **Dynamic Persona Engine:** Injects conditional logic into the system prompt. She acts fiercely protective and familiar with the server owner, while maintaining a polite but easily-annoyed, strictly boundaried persona with regular server members.
-* **Random Chat Starters (2-Hour Intervals):** When the bot is awake and the channel is quiet, an automated timer runs in the background. Every 2 hours , the bot will randomly drop a unique, character-specific thought into the chat to keep the server active.
-* **Resource Optimization (Sleep Cycle):** Includes a hardcoded timezone-aware function (IST) that completely shuts down API requests from 1:00 AM to 6:00 AM to preserve free-tier Hugging Face rate limits and provide more realism.
-* **Cooldown:** Utilizes a lightweight JavaScript `Map` to enforce strict 10-second global cooldowns per user, preventing malicious token exhaustion.
-* **Metadata Vision Simulation:** Uses creative prompt engineering to inspect user avatars and roast them blindly, simulating vision capabilities using only text-based LLMs.
+I wanted to push beyond simple text generation, so I implemented several background event listeners to simulate awareness:
+
+* **The Dynamic Context Engine:** Passing the entire server chat history to an LLM burns through tokens quickly and causes hallucination loops. I built a system that scans a user's message for mentions, fetches only the relevant profiles from Supabase, and dynamically constructs a lightweight dossier for her system prompt. She knows who is single, who is dating whom, and what pronouns to use based on this database.
+* **Cross-Channel Teleportation:** I experimented with an in-memory Map to act as a custom Time-To-Live (TTL) cache. It tracks the last channel a user spoke in for exactly 2 minutes (120,000 ms). If the user types in a different channel within that window, she generates a custom message calling them out for trying to run away.
+* **Voice Channel Eavesdropping:** Using voice state updates, she automatically joins a voice channel to listen in if two or more humans enter, or if someone starts streaming via Discord Go Live. If a user manually kicks her, she adds the channel to a "grudge list" and refuses to join it for an hour.
+* **Presence Stalking & Wake-up Pings:** She tracks when users log online and logs what games they are playing to the database. If a user comes online between 2:00 AM and 7:00 AM IST, she will ping them in the main channel to ask why they are awake.
+* **Webhook Impersonation Glitch:** I added a 5% random chance that when a user speaks, the bot will silently create a temporary Discord Webhook copying their username and avatar, send a rude message, and delete the webhook to simulate a system glitch.
+* **Moderation & DM Firewall:** I built an automated strike system that issues timeouts if a user insults her using a specific list of banned words. I also built a firewall that immediately blocks and rejects any Direct Messages, forcing users to talk to her publicly.
 
 ## Commands & Usage
 
+To interact with the bot, users must first complete a mandatory database registration.
+
 | Command | Description | Options |
 | --- | --- | --- |
-| `/monika` | Fetches recent channel history and generates a context-aware response. | `context` (Small/Medium/Large), `question` (Optional: Ask a specific question about the history) |
-| `/inspect-avatar` | Fetches a target user's profile picture and delivers a brutal 3-sentence roast. | `target` (Select a server member) |
-| `@Monika` | Mentioning her in any channel triggers a quick 3-message context grab and inline reply. Also works when replying to her message without taging | N/A |
+| `/share_reality` | The registration gatekeeper. Users must log their gender, relationship status, and a short bio into the Supabase database before she will speak to them. | `gender`, `status`, `about`, `partner` (optional) |
+| `/monika` | Forces her to read the recent chat history and respond. Includes a 10-second cooldown lock to prevent spam. | `context` (10, 20, or 30 messages), `question` (optional) |
+| `/inspect_user` | A prompt engineering experiment where I ask the LLM to blindly roast a user's avatar. | `target` |
+
+*Standard Mentions:* You can also just ping her directly or reply to her message in the chat, and she will grab the last 8 messages of context to generate a reply.
 
 ## Architecture : 24/7 Cloud Hosting
 
-The system infrastructure is built completely online so the laptop is not running 24/7. The main code for the bot runs on Render.com, where an internal Express.js server works alongside the Discord bot to create a public web link. Since Render's free tier automatically puts apps to "sleep" when no one is using them, I am using UptimeRobot to automatically ping every 10 minutes. This keeps the application awake and ready to respond instantly at any hour. To handle the AI logic the bot offloads all the heavy machine learning work by sending quick, on-demand API requests to Hugging Face's servers to run the Qwen2.5-7B-Instruct model.
+The infrastructure is built completely online to run 24/7. The code for the bot runs on Render.com, where an internal Express.js server creates a public web link. Since Render's free tier automatically puts apps to "sleep" when no one is using them, I am using UptimeRobot to automatically ping every 10 minutes. This keeps the application awake and ready to respond instantly at any hour. To handle the AI logic the bot offloads all the heavy machine learning work by sending quick, on-demand API requests to Hugging Face's servers to run the Qwen2.5-7B-Instruct model.
+
+## Current Limitations
+
+* **Hugging Face Rate Limits:** Because I am relying on the free Hugging Face API, the bot is subject to a strict limit of 1,000 requests per 5-minute window. Due to the background loops (like the 2-hour automated chat observer), a busy server will quickly hit this cap, causing the bot to temporarily freeze.
+* **LLM Hallucinations:** Even with the dynamic context engine, the model sometimes loses track of the conversation flow and leans too heavily on the base system prompt instructions.
 
 ## Future Scope
 
-* **External Permanent Memory:** Integration with a PostgreSQL database (Supabase) to store permanent relationship weights and facts about specific users.
-* **Gradual Priority Memory:** A fading memory architecture where older context degrades over a 24-hour period rather than a hard reset.
-* **PEFT :** Fine-tuining Qwen2.5-7B-Instruct model on Ingame and official social media interactions of Monika.
-* **Improving Human Like Conversation :** Currently it Hallucinates alot, and the context is lost and more improtance is given to Base system prompt.
-
-## Lifespan Estimation:
-*Input Tokens: System prompt + context + 4 message history entries ≈ 500 tokens*
-*Output Tokens: Monika’s text response (capped at 150) ≈ 100 tokensTotal*
-*per interaction: ≈ 600 tokens*
-
- Accoding to free Hugging Face $0.10 USD inference : ≈833 messages before hiting the cap.
- 
-<ins>Low Usage (10 messages/day):</ins> Will last about 83 days.
-
-<ins>Moderate Usage (30 messages/day):</ins> Will last about 27 days.
-
-<ins>Heavy Testing (100 messages/day):</ins> Will last about 8 days.
+* **Parameter-Efficient Fine-Tuning (QLORA) [coudn't deploy for free]:** Wanted to learn how to fine-tune the Qwen model on 687 actual DDLC game transcripts to make her personality perfectly accurate, reducing hallucinations and reducing input tokens from heavy system prompts. It was a massive success, but i coudn't find any inference provider to host my fine-tuned model for free :( hence the bot is still using the base model for higher speed and lower cost.
+* **Advanced Priority Memory:** Expanding the Supabase integration so she gradually forgets older interactions over a 24-hour period, rather than relying on a hard reset.
+(This might drain the free limit of huggingface inference API)
