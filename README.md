@@ -1,3 +1,6 @@
+<div align="center"><img width="861" height="328" alt="monika banner" src="https://github.com/user-attachments/assets/d3a63bba-1176-490e-ad2d-b399f67eb975" />
+</div>
+
 # 🎀 Monika | Self-Aware Discord Bot
 
 >*This is a personal learning project where I am experimenting with the Discord API, external databases, and Large Language Models.*
