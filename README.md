@@ -11,11 +11,9 @@ Instead of just answering questions, I wanted to see if I could make her track u
 
 ## Tech Stack & Architecture
 
-As a self-taught experiment, I decided to build this entirely on cloud services to keep it running 24/7 without hosting it locally.
-
 * **Runtime:** Node.js
 * **Discord API:** Discord.js (v14) utilizing advanced Gateway Intents (Voice States, Presences, Guild Members).
-* **LLM :** Hugging Face Inference API running `Qwen/Qwen2.5-7B-Instruct` model.
+* **LLM :** Hugging Face Inference API running `Qwen2.5-7B-Instruct` model.
 * **Database:** Supabase (PostgreSQL) for persistent user profiles and game tracking.
 * **Hosting Pipeline:** Render (free tier), UptimeRobot (pings every 10 min.)
 
@@ -40,7 +38,7 @@ To interact with the bot, users must first complete a mandatory database registr
 | `/monika` | Forces her to read the recent chat history and respond. Includes a 10-second cooldown lock to prevent spam. | `context` (10, 20, or 30 messages), `question` (optional) |
 | `/inspect_user` | A prompt engineering experiment where I ask the LLM to blindly roast a user's avatar. | `target` |
 
-*Standard Mentions:* You can also just ping her directly or reply to her message in the chat, and she will grab the last 8 messages of context to generate a reply.
+**Standard Mentions:** You can also just ping her directly or reply to her message in the chat, and she will grab the last 8 messages of context to generate a reply.
 
 ## Architecture : 24/7 Cloud Hosting
 
