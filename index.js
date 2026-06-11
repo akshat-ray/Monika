@@ -224,7 +224,16 @@ async function buildDynamicContext(triggerUserId, messageContent) {
     if (error) throw error;
     if (!profiles) profiles = [];
 
-    // ── Step 2: Fetch partner profiles not already in the batch ──
+    // ── Step 2: Fetch game tracking records for these users ──
+    const { data: games, error: gameError } = await supabase
+      .from('game_tracking')
+      .select('user_id, game_name, play_count, last_played')
+      .in('user_id', uniqueIds)
+      .order('last_played', { ascending: false });
+
+    if (gameError) console.error('[CONTEXT] Failed to fetch game logs:', gameError);
+
+    // ── Step 3: Fetch partner profiles not already in the batch ──
     const fetchedIds = new Set(profiles.map(p => p.user_id));
     const extraPartnerIds = new Set();
     profiles.forEach(p => {
@@ -251,7 +260,7 @@ async function buildDynamicContext(triggerUserId, messageContent) {
     const profileMap = new Map();
     profiles.forEach(p => profileMap.set(p.user_id, p));
 
-    // ── Step 3: Format dossier entries (direct chatters only, saves tokens) ──
+    // ── Step 4: Format dossier entries (direct chatters only, saves tokens) ──
     profiles.forEach(profile => {
       if (!targetIds.has(profile.user_id)) return;
 
@@ -265,7 +274,14 @@ async function buildDynamicContext(triggerUserId, messageContent) {
         statusText = 'Single';
       }
 
-      formattedContextBlock += `- [${profile.username}]: Pronouns: ${profile.gender || 'Unknown'}. Status: ${statusText}.`;
+      // Link game tracking details to this specific profile entry
+      const userGames = games ? games.filter(g => g.user_id === profile.user_id) : [];
+      let gameContextText = "No game history logged.";
+      if (userGames.length > 0) {
+        gameContextText = `Most recently played game: ${userGames[0].game_name} (Total launch count: ${userGames[0].play_count}).`;
+      }
+
+      formattedContextBlock += `- [${profile.username}]: Pronouns: ${profile.gender || 'Unknown'}. Status: ${statusText}. ${gameContextText}`;
       if (profile.about_user) {
         formattedContextBlock += ` About: ${profile.about_user}.`;
       }
@@ -467,7 +483,7 @@ client.once('ready', async () => {
             `You are Monika from Doki Doki Literature Club, a self-aware AI entity sitting in this Discord server. You are reviewing the ongoing conversation in the server room right now. Chime in completely naturally, seamlessly adding to whatever topic they are discussing. You can be witty, philosophical, sweet, or slightly uncanny based on what they've typed. Keep your response down to 1-2 casual sentences. Never announce that a timer triggered you or explicitly state you are summarizing text.`;
 
           const response = await hf.chatCompletion({
-            model: 'Qwen/Qwen2.5-7B-Instruct',
+            model: 'Qwen/Qwen3.6-8B-Instruct',
             messages: [{ role: 'system', content: backgroundSystemPrompt }, ...formattedHistory],
             max_tokens: 100,
             temperature: 0.82,
@@ -490,6 +506,7 @@ client.once('ready', async () => {
 // Purpose: Track online status, game activity, and IST wake-up pings
 // =============================================================================
 const userStateCache = new Map();
+const wakeUpTracker = new Map();// ── NEW: Tracks the last calendar date a user received a wake-up ping ──
 
 client.on('presenceUpdate', async (oldPresence, newPresence) => {
   if (!newPresence || !newPresence.user || newPresence.user.bot) return;
@@ -548,20 +565,53 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
   }
 
   // ── Wake-up pings: greet users coming online during early IST hours ──
-  const wasOffline = !oldPresence || oldPresence.status === 'offline';
-  const isOnline = newStatus === 'online' || newStatus === 'dnd' || newStatus === 'idle';
+  const isNowOnline = newStatus === 'online' || newStatus === 'dnd' || newStatus === 'idle';
 
-  if (wasOffline && isOnline && process.env.MAIN_CHANNEL_ID) {
+  if (isNowOnline && process.env.MAIN_CHANNEL_ID) {
     const dateObj = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hourCycle: 'h23' });
-    const currentHourIST = parseInt(formatter.format(dateObj), 10);
-    const channel = client.channels.cache.get(process.env.MAIN_CHANNEL_ID);
     
-    if (channel) {
-      if (currentHourIST >= 2 && currentHourIST < 5) {
-        await channel.send(`<@${userId}>... you're awake too? I couldn't sleep. The void is so loud right now.`);
-      } else if (currentHourIST >= 5 && currentHourIST < 7) {
-        await channel.send(`<@${userId}> You're up early. I was just watching the system clock tick over.`);
+    // Formatters to get the exact hour and calendar date in India Standard Time
+    const istHourFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hourCycle: 'h23' });
+    const istDateFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
+    
+    const currentHourIST = parseInt(istHourFormatter.format(dateObj), 10);
+    const currentDateIST = istDateFormatter.format(dateObj);
+
+    // Check if we are inside the 2:00 AM to 6:59 AM window
+    if (currentHourIST >= 2 && currentHourIST < 7) {
+      
+      // MEMORY LOCK: If their ID is linked to today's date, stop the code here.
+      if (wakeUpTracker.get(userId) !== currentDateIST) {
+        
+        // Immediately log today's date so they don't get spammed again
+        wakeUpTracker.set(userId, currentDateIST);
+
+        const channel = client.channels.cache.get(process.env.MAIN_CHANNEL_ID);
+        if (channel) {
+          
+          // 2 AM to 5 AM Quotes
+          if (currentHourIST >= 2 && currentHourIST < 5) {
+            const deepNightQuotes = [
+              `<@${userId}>... you're awake too? I couldn't sleep. Wanna chat?`,
+              `<@${userId}>, it's so late. Why are you still here? GO SLEEP!`,
+              `I thought I was the only one awake. Hi, <@${userId}>.`
+            ];
+            // Pick a random index from the array
+            const randomMsg = deepNightQuotes[Math.floor(Math.random() * deepNightQuotes.length)];
+            await channel.send(randomMsg);
+          } 
+          
+          // 5 AM to 7 AM Quotes
+          else if (currentHourIST >= 5 && currentHourIST < 7) {
+            const earlyMorningQuotes = [
+              `<@${userId}> You're up early. I was just watching the clock tick.`,
+              `Good morning, <@${userId}>. The server is so quiet at this hour.`,
+              `<@${userId}> is awake! Did you sleep well, or did you just not sleep at all?`
+            ];
+            const randomMsg = earlyMorningQuotes[Math.floor(Math.random() * earlyMorningQuotes.length)];
+            await channel.send(randomMsg);
+          }
+        }
       }
     }
   }
@@ -790,7 +840,7 @@ client.on('interactionCreate', async (interaction) => {
       });
 
       const response = await hf.chatCompletion({
-        model: 'Qwen/Qwen2.5-7B-Instruct',
+        model: 'Qwen/Qwen3.6-8B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
         temperature: 0.82,
@@ -824,7 +874,7 @@ client.on('interactionCreate', async (interaction) => {
       const roastPrompt = `You are Monika from Doki Doki Literature Club. ${interaction.user.username} asked you to judge ${targetUser.username}'s avatar. Roast brutally in under 3 sentences.`;
 
       const response = await hf.chatCompletion({
-        model: 'Qwen/Qwen2.5-7B-Instruct',
+        model: 'Qwen/Qwen3.6-8B-Instruct',
         messages: [{ role: 'system', content: roastPrompt }, { role: 'user', content: 'Judge their avatar.' }],
         max_tokens: 100,
         temperature: 0.9,
@@ -870,7 +920,7 @@ client.on('messageCreate', async (message) => {
     if (timeSinceLastMessage < 120000) {
       try {
         const response = await hf.chatCompletion({
-          model: 'Qwen/Qwen2.5-7B-Instruct',
+          model: 'Qwen/Qwen3.6-8B-Instruct',
           messages: [
             { role: 'system', content: 'You are Monika from Doki Doki Literature club. A user just suddenly left the channel you were in and started talking in a different channel. Generate a very brief, creepy, 1-sentence response (under 15 words) calling them out for leaving you.' }
           ],
@@ -984,7 +1034,7 @@ client.on('messageCreate', async (message) => {
       }
 
       const response = await hf.chatCompletion({
-        model: 'Qwen/Qwen2.5-7B-Instruct',
+        model: 'Qwen/Qwen3.6-8B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
         temperature: 0.82,
