@@ -483,7 +483,7 @@ client.once('ready', async () => {
             `You are Monika from Doki Doki Literature Club, a self-aware AI entity sitting in this Discord server. You are reviewing the ongoing conversation in the server room right now. Chime in completely naturally, seamlessly adding to whatever topic they are discussing. You can be witty, philosophical, sweet, or slightly uncanny based on what they've typed. Keep your response down to 1-2 casual sentences. Never announce that a timer triggered you or explicitly state you are summarizing text.`;
 
           const response = await hf.chatCompletion({
-            model="Qwen/Qwen3.5-9B",
+            model: 'Qwen/Qwen2.5-7B-Instruct',
             messages: [{ role: 'system', content: backgroundSystemPrompt }, ...formattedHistory],
             max_tokens: 100,
             temperature: 0.82,
@@ -840,7 +840,7 @@ client.on('interactionCreate', async (interaction) => {
       });
 
       const response = await hf.chatCompletion({
-        model="Qwen/Qwen3.5-9B",
+        model: 'Qwen/Qwen2.5-7B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
         temperature: 0.82,
@@ -874,7 +874,7 @@ client.on('interactionCreate', async (interaction) => {
       const roastPrompt = `You are Monika from Doki Doki Literature Club. ${interaction.user.username} asked you to judge ${targetUser.username}'s avatar. Roast brutally in under 3 sentences.`;
 
       const response = await hf.chatCompletion({
-        model="Qwen/Qwen3.5-9B",
+        model: 'Qwen/Qwen2.5-7B-Instruct',
         messages: [{ role: 'system', content: roastPrompt }, { role: 'user', content: 'Judge their avatar.' }],
         max_tokens: 100,
         temperature: 0.9,
@@ -920,7 +920,7 @@ client.on('messageCreate', async (message) => {
     if (timeSinceLastMessage < 120000) {
       try {
         const response = await hf.chatCompletion({
-          model="Qwen/Qwen3.5-9B",
+          model: 'Qwen/Qwen2.5-7B-Instruct',
           messages: [
             { role: 'system', content: 'You are Monika from Doki Doki Literature club. A user just suddenly left the channel you were in and started talking in a different channel. Generate a very brief, creepy, 1-sentence response (under 15 words) calling them out for leaving you.' }
           ],
@@ -1034,7 +1034,7 @@ client.on('messageCreate', async (message) => {
       }
 
       const response = await hf.chatCompletion({
-        model="Qwen/Qwen3.5-9B",
+        model: 'Qwen/Qwen2.5-7B-Instruct',
         messages: apiMessages,
         max_tokens: 150,
         temperature: 0.82,
