@@ -36,6 +36,7 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates, // Voice eavesdropping & stream watching
     GatewayIntentBits.GuildMembers,     // Member cache for profile lookups
     GatewayIntentBits.DirectMessages,   // DM firewall handler
+    GatewayIntentBits.GuildMessageTyping,
   ],
   partials: [Partials.Channel], // Required to receive DM channel events
 });
