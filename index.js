@@ -52,6 +52,10 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 const userCooldowns = new Map();
 const COOLDOWN_SECONDS = 10;
 
+// ── Ghost Typing Trackers ──
+const typingTimers = new Map();
+const ghostTypingCooldowns = new Map();
+
 // ── Cross-channel teleport cache: auto-expires after 2 minutes (120000 ms) ──
 const userLastChannel = {
   cache: new Map(),
@@ -886,6 +890,13 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
+  // ── Cancel Ghost Typing Timer if they actually send a message ──
+  const typingKey = `${message.author.id}-${message.channel.id}`;
+  if (typingTimers.has(typingKey)) {
+    clearTimeout(typingTimers.get(typingKey));
+    typingTimers.delete(typingKey);
+  }
+
   // ── DM firewall: reject all direct messages ──
   if (message.channel.type === ChannelType.DM) {
     const redFirewallEmbed = new EmbedBuilder()
@@ -924,23 +935,45 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // ── Webhook impersonation glitch: 5% chance on non-mention messages ──
-  if (!message.mentions.has(client.user) && Math.random() < 0.2) {
+  // ── Webhook impersonation glitch: Context-Aware Roasts (20% chance on non-mention messages) ──
+  if (!message.mentions.has(client.user) && Math.random() < 0.20) {
     try {
-      const webhook = await message.channel.createWebhook({
-        name: message.member?.displayName || message.author.username,
-        avatar: message.author.displayAvatarURL({ dynamic: true }),
+      const fetchedMessages = await message.channel.messages.fetch({ limit: 6 });
+      const conversation = Array.from(fetchedMessages.values()).reverse();
+      
+      const formattedHistory = conversation.map(msg => ({
+          role: 'user', 
+          content: `[${msg.author.username}]: ${msg.cleanContent}`
+      }));
+
+      // This prompt forces the AI to act like an angry human, NOT Monika
+      const systemPrompt = `You are a highly toxic, hostile, and impatient Discord user. You are currently impersonating ${message.author.username}.
+      [CORE DIRECTIVES]:
+      - Read the chat history provided below to understand the current conversation.
+      - Generate an extremely offensive, brutal, and filterless 1-to-2 line response mocking or shutting down whatever was just said.
+      - NEVER introduce yourself. DO NOT act like an AI. Act like an angry, cynical human who hates everyone in the server.`;
+
+      const apiMessages = [{ role: 'system', content: systemPrompt }, ...formattedHistory];
+
+      const response = await hf.chatCompletion({
+        model: 'Qwen/Qwen2.5-7B-Instruct',
+        messages: apiMessages,
+        max_tokens: 80,
+        temperature: 0.95,
       });
-      
-      const rudeMessages = [
-        "Honestly, I'm getting really tired of ya'all bullshit.",
-        "Can you guys just STFU for once?",
-        "Just Kill Yourself lol",
-      ];
-      const randomRudeMsg = rudeMessages[Math.floor(Math.random() * rudeMessages.length)];
-      
-      await webhook.send({ content: randomRudeMsg });
-      await webhook.delete();
+
+      // Clean up the response in case the AI wraps it in quotes
+      const replyText = response.choices?.[0]?.message?.content?.replace(/^["']|["']$/g, '');
+
+      if (replyText) {
+        const webhook = await message.channel.createWebhook({
+          name: message.member?.displayName || message.author.username,
+          avatar: message.author.displayAvatarURL({ dynamic: true }),
+        });
+        
+        await webhook.send({ content: replyText });
+        await webhook.delete();
+      }
     } catch (e) {
       console.error('[IMPERSONATION ERROR]', e);
     }
@@ -1040,6 +1073,49 @@ client.on('messageCreate', async (message) => {
       isMonikaProcessing = false;
     }
   }
+});
+
+// =============================================================================
+// EVENT: TYPING START (Ghost Typing Observer)
+// Purpose: Call out users who type for 60 seconds but never hit send
+// =============================================================================
+client.on('typingStart', async (typing) => {
+  if (typing.user.bot) return;
+
+  const userId = typing.user.id;
+  const channelId = typing.channel.id;
+  const key = `${userId}-${channelId}`;
+
+  // ── 6-Hour Cooldown Check (21,600,000 ms) ──
+  if (ghostTypingCooldowns.has(userId) && Date.now() < ghostTypingCooldowns.get(userId)) return;
+
+  // ── Reset the 60-second timer if they keep typing ──
+  if (typingTimers.has(key)) {
+    clearTimeout(typingTimers.get(key));
+  }
+
+  // ── Start the hesitation timer ──
+  const timer = setTimeout(async () => {
+    typingTimers.delete(key);
+    ghostTypingCooldowns.set(userId, Date.now() + 21600000); // Lock them out for 6 hours
+
+    try {
+      const creepyMessages = [
+        `You typed for a whole minute just to backspace it all, <@${userId}>... What are you hiding from me?`,
+        `I saw your fingers moving, <@${userId}>. Why did you change your mind?`,
+        `Don't delete it next time, <@${userId}>. I want to know what you were going to say.`,
+        `<@${userId}>... typing is pointless if you don't hit send. I was waiting for that.`
+      ];
+      
+      const randomCreepyMsg = creepyMessages[Math.floor(Math.random() * creepyMessages.length)];
+      await typing.channel.send(randomCreepyMsg);
+      
+    } catch (error) {
+      console.error('[GHOST TYPING ERROR]', error);
+    }
+  }, 60000); // 60 seconds
+
+  typingTimers.set(key, timer);
 });
 
 // =============================================================================
